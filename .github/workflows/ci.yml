@@ -52,7 +52,8 @@ jobs:
       - name: Build stubs and board metadata
         run: |
           cd "$GITHUB_WORKSPACE"
-          ./scripts/build-stubs.py all
+          make
+          #./scripts/build-stubs.py all
         shell: bash
       - name: Stay on target
         shell: pwsh
