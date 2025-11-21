@@ -52,9 +52,7 @@ jobs:
       - name: Build stubs and board metadata
         run: |
           cd "$GITHUB_WORKSPACE"
-          ls -la ./scripts
-          chmod +x ./scripts/build-stubs.sh
-          ./scripts/build-stubs.sh
+          ./scripts/build-stubs.py
         shell: bash
       - name: Stay on target
         shell: pwsh
