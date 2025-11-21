@@ -3,15 +3,15 @@
   "displayName": "CircuitPython v2",
   "description": "CircuitPython for Visual Studio Code",
   "version": "0.3.4",
-  "publisher": "wmerkens",
+  "publisher": "tyeth",
   "license": "MIT",
-  "qna": "https://github.com/wmerkens/vscode-circuitpython/discussions",
+  "qna": "https://github.com/tyeth/wmerkens_vscode-circuitpython/discussions",
   "repository": {
     "type": "git",
-    "url": "https://github.com/wmerkens/vscode-circuitpython.git"
+    "url": "https://github.com/tyeth/wmerkens_vscode-circuitpython.git"
   },
   "bugs": {
-    "url": "https://github.com/wmerkens/vscode-circuitpython/issues"
+    "url": "https://github.com/tyeth/wmerkens_vscode-circuitpython/issues"
   },
   "engines": {
     "vscode": "^1.103.1"
