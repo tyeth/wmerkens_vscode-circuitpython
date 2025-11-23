@@ -52,7 +52,27 @@ jobs:
       - name: Build stubs and board metadata
         run: |
           cd "$GITHUB_WORKSPACE"
-          make
+          make all
+      - name: Set VSIX target
+        shell: pwsh
+        run: |
+          # echo "target=win32-x64" >> $env:GITHUB_ENV
+          echo "target=${{ matrix.platform }}-${{ matrix.arch }}" >> $env:GITHUB_ENV
+      - name: Build Package
+        run: npx vsce package --target $env:target
+
+          #./scripts/build-stubs.py all
+        shell: bash
+      - name: Stay on target
+        shell: pwsh
+        run: echo "target=${{ matrix.platform }}-${{ matrix.arch }}" >> $env:GITHUB_ENV
+      - name: Build Package
+        run: npx vsce package --target ${{ env.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.target }}
+          path: "*.vsix"
+
   build-windows-sandbox:
     name: Build (Windows Sandbox)
     runs-on: [self-hosted, windows, cp-sandbox]
