@@ -7,67 +7,147 @@ param(
     [string]$RunnerLabels = "self-hosted,windows,cp-sandbox",
     # Short-lived registration token; always passed in from host script.
     [Parameter(Mandatory = $true)]
-    [string]$RunnerToken
+    [string]$RunnerToken,
+    # Internal switch used when the script re-executes itself after installing tools.
+    [switch]$SkipBootstrap
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-Write-Host "[sandbox] Setting execution policy for this process..."
-try {
-    Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
-    # install provider nuget powershellget if needed
-    Install-PackageProvider -Name NuGet -Force
-} catch {
-    Write-Warning "[sandbox] Failed to set execution policy: $($_.Exception.Message)"
-}
+if (-not $SkipBootstrap) {
+    Write-Host "[sandbox] Initial bootstrap: setting execution policy and NuGet provider..."
+    try {
+        Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
+        Install-PackageProvider -Name NuGet -Force
+    } catch {
+        Write-Warning "[sandbox] Bootstrap execution policy/NuGet failed: $($_.Exception.Message)"
+    }
 
-Write-Host "[sandbox] Ensuring core tools are available (git/node/python/curl/wget) via winget if present..."
+    Write-Host "[sandbox] Initial bootstrap: ensuring winget and core tools via winget (git/node22/python/curl/wget/PowerShell) if present..."
+    try {
+        $wingetCmd = Get-Command winget -ErrorAction SilentlyContinue
 
-try {
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
-        $packages = @(
-            @{ Id = 'Git.Git' },
-            @{ Id = 'OpenJS.NodeJS.LTS' },
-            @{ Id = 'Python.Python.3.11' },
-            @{ Id = 'GnuWin32.curl' },
-            @{ Id = 'GnuWin32.wget' },
-            # Newer PowerShell that includes Microsoft.PowerShell.Archive on some images
-            @{ Id = 'Microsoft.PowerShell' }
-        )
-        foreach ($pkg in $packages) {
+        if (-not $wingetCmd) {
+            Write-Host "[sandbox] winget not found; attempting Repair-WinGetPackageManager (IncludePrerelease)..."
+
             try {
-                winget install --id $($pkg.Id) -e --silent --accept-package-agreements --accept-source-agreements | Out-Null
-            } catch {
-                Write-Warning "[sandbox] winget failed for $($pkg.Id): $($_.Exception.Message)"
-            }
-        }
-    }
-} catch {
-    Write-Warning "[sandbox] winget bootstrap phase failed: $($_.Exception.Message)"
-}
-
-Write-Host "[sandbox] Ensuring Microsoft.PowerShell.Archive / Expand-Archive is available..."
-try {
-    $archiveCmd = Get-Command -Name Expand-Archive -ErrorAction Ignore
-    if (-not $archiveCmd) {
-        # Prefer built-in module if present
-        try {
-            Import-Module Microsoft.PowerShell.Archive -ErrorAction Stop
-        } catch {
-            if (Get-Command Install-Module -ErrorAction Ignore) {
-                try {
-                    Install-Module -Name Microsoft.PowerShell.Archive -Force -Scope AllUsers -AllowClobber -ErrorAction Stop -Confirm:$false
-                } catch {
-                    Write-Warning "[sandbox] Install-Module for Microsoft.PowerShell.Archive failed: $($_.Exception.Message)"
+                $winGetModule = Get-Module -ListAvailable -Name Microsoft.WinGet.Client
+                if (-not $winGetModule) {
+                    if (Get-Command Install-Module -ErrorAction SilentlyContinue) {
+                        try {
+                            Install-Module -Name Microsoft.WinGet.Client -Force -Scope AllUsers -AllowClobber -Confirm:$false
+                        } catch {
+                            Write-Warning "[sandbox] Install-Module Microsoft.WinGet.Client failed: $($_.Exception.Message)"
+                        }
+                    } else {
+                        Write-Warning "[sandbox] Install-Module not available; cannot install Microsoft.WinGet.Client."
+                    }
                 }
-            } else {
-                Write-Warning "[sandbox] Install-Module not available; Expand-Archive may still be missing. actions/checkout might fall back to ZipFile."
+
+                Import-Module Microsoft.WinGet.Client -ErrorAction SilentlyContinue
+
+                if (Get-Command Repair-WinGetPackageManager -ErrorAction SilentlyContinue) {
+                    Repair-WinGetPackageManager -IncludePrerelease -ErrorAction SilentlyContinue
+                } else {
+                    Write-Warning "[sandbox] Repair-WinGetPackageManager cmdlet not available even after importing Microsoft.WinGet.Client."
+                }
+            } catch {
+                Write-Warning "[sandbox] Failed to repair/install winget: $($_.Exception.Message)"
+            }
+
+            # Re-check after attempted repair/install
+            $wingetCmd = Get-Command winget -ErrorAction SilentlyContinue
+        }
+
+        if ($wingetCmd) {
+            $packages = @(
+                @{ Id = 'Git.Git' },
+                @{ Id = 'OpenJS.NodeJS' },      # Node.js (we'll pin major version below)
+                @{ Id = 'Python.Python.3.11' },
+                @{ Id = 'GnuWin32.curl' },
+                @{ Id = 'GnuWin32.wget' },
+                @{ Id = 'Microsoft.PowerShell' }
+            )
+            foreach ($pkg in $packages) {
+                try {
+                    Write-Host "[sandbox] Installing or updating $($pkg.Id) via winget..."
+                    winget install --id $($pkg.Id) -e --accept-package-agreements --accept-source-agreements | Out-Null
+                } catch {
+                    Write-Warning "[sandbox] winget failed for $($pkg.Id): $($_.Exception.Message)"
+                }
+            }
+
+            # Ensure Node 22 specifically
+            try {
+                Write-Host "[sandbox] Installing or updating OpenJS.NodeJS version 22 via winget..."
+                winget install --id OpenJS.NodeJS -e --version 22 --accept-package-agreements --accept-source-agreements | Out-Null
+            } catch {
+                Write-Warning "[sandbox] winget failed to install Node 22 explicitly: $($_.Exception.Message)"
+            }
+        } else {
+            Write-Host "[sandbox] winget still not available; skipping tool installation."
+        }
+    } catch {
+        Write-Warning "[sandbox] winget bootstrap phase failed: $($_.Exception.Message)"
+    }
+
+    Write-Host "[sandbox] Initial bootstrap: ensuring Microsoft.PowerShell.Archive / Expand-Archive is available..."
+    try {
+        $archiveCmd = Get-Command -Name Expand-Archive -ErrorAction Ignore
+        if (-not $archiveCmd) {
+            try {
+                Import-Module Microsoft.PowerShell.Archive -ErrorAction Stop
+            } catch {
+                if (Get-Command Install-Module -ErrorAction Ignore) {
+                    try {
+                        Install-Module -Name Microsoft.PowerShell.Archive -Force -Scope AllUsers -AllowClobber -ErrorAction Stop -Confirm:$false
+                    } catch {
+                        Write-Warning "[sandbox] Install-Module for Microsoft.PowerShell.Archive failed: $($_.Exception.Message)"
+                    }
+                } else {
+                    Write-Warning "[sandbox] Install-Module not available; Expand-Archive may still be missing. actions/checkout might fall back to ZipFile."
+                }
             }
         }
+    } catch {
+        Write-Warning "[sandbox] Failed to ensure Microsoft.PowerShell.Archive: $($_.Exception.Message)"
     }
-} catch {
-    Write-Warning "[sandbox] Failed to ensure Microsoft.PowerShell.Archive: $($_.Exception.Message)"
+
+    Write-Host "[sandbox] Restarting start-runner.ps1 under updated environment..."
+    $scriptPath = $MyInvocation.MyCommand.Path
+    try {
+        if (-not $scriptPath) {
+            throw "Script path not available from MyInvocation.MyCommand.Path"
+        }
+
+        $pwshCmd = Get-Command pwsh.exe -ErrorAction SilentlyContinue
+        if ($pwshCmd) {
+            $pwsh = $pwshCmd.Source
+        } else {
+            $pwsh = 'powershell.exe'
+        }
+
+        $args = @(
+            '-File', $scriptPath,
+            '-RepoUrl', $RepoUrl,
+            '-RunnerVersion', $RunnerVersion,
+            '-RunnerLabels', $RunnerLabels,
+            '-RunnerToken', $RunnerToken,
+            '-SkipBootstrap'
+        )
+
+        Write-Host "[sandbox] About to run: $pwsh $($args -join ' ')"
+
+        # Use a single argument string for widest compatibility with older PowerShell
+        $argString = $args -join ' '
+        Start-Process -FilePath $pwsh -ArgumentList $argString -NoNewWindow
+    } catch {
+        Write-Error "[sandbox] Failed to restart start-runner.ps1 under updated environment: $($_.Exception.Message)"
+        Read-Host "[sandbox] Error during bootstrap (restart). Press Enter to close this window"
+    }
+
+    exit 0
 }
 
 New-Item -ItemType Directory -Path "C:\actions-runner" -Force | Out-Null
