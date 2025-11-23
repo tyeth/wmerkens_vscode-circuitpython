@@ -2,7 +2,7 @@ param(
     # URL of the GitHub repository this runner should attach to.
     [string]$RepoUrl = "https://github.com/tyeth/wmerkens_vscode-circuitpython",
     # GitHub Actions runner version; keep in sync with GitHub guidance.
-    [string]$RunnerVersion = "2.319.1",
+    [string]$RunnerVersion = "2.330.0",
     # Comma-separated list of labels; can be overridden per repo.
     [string]$RunnerLabels = "self-hosted,windows,cp-sandbox",
     # Short-lived registration token; always passed in from host script.
@@ -112,6 +112,52 @@ if (-not $SkipBootstrap) {
         }
     } catch {
         Write-Warning "[sandbox] Failed to ensure Microsoft.PowerShell.Archive: $($_.Exception.Message)"
+    }
+
+    Write-Host "[sandbox] Initial bootstrap: ensuring Visual Studio Build Tools are installed..."
+    try {
+        $vsInstallPath = "C:\BuildTools"
+        $vsMarkerFile  = Join-Path $vsInstallPath ".install-complete"
+
+        if (-not (Test-Path $vsMarkerFile)) {
+            $vsUrl = "https://aka.ms/vs/17/release/vs_BuildTools.exe"
+            $vsExe = Join-Path $env:TEMP "vs_BuildTools.exe"
+
+            Write-Host "[sandbox] Downloading VS Build Tools bootstrapper from $vsUrl ..."
+
+            if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
+                & curl.exe -L "$vsUrl" -o "$vsExe"
+            } elseif (Get-Command wget -ErrorAction SilentlyContinue) {
+                & wget "$vsUrl" -O "$vsExe"
+            } else {
+                throw "Neither curl.exe nor wget is available to download VS Build Tools."
+            }
+
+            if (-not (Test-Path $vsExe)) {
+                throw "VS Build Tools bootstrapper download failed; '$vsExe' not found."
+            }
+
+            Write-Host "[sandbox] Installing VS Build Tools silently to $vsInstallPath ... (this can take several minutes)"
+
+            & $vsExe `
+                --quiet --wait --norestart `
+                --installPath "$vsInstallPath" `
+                --add Microsoft.VisualStudio.Workload.VCTools `
+                --add Microsoft.VisualStudio.Workload.ManagedDesktopBuildTools `
+                --add Microsoft.VisualStudio.Workload.MSBuildTools
+
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warning "[sandbox] VS Build Tools installer exited with code $LASTEXITCODE."
+            } else {
+                New-Item -ItemType Directory -Path $vsInstallPath -Force | Out-Null
+                New-Item -ItemType File -Path $vsMarkerFile -Force | Out-Null
+                Write-Host "[sandbox] VS Build Tools installation completed."
+            }
+        } else {
+            Write-Host "[sandbox] VS Build Tools already marked as installed at $vsInstallPath."
+        }
+    } catch {
+        Write-Warning "[sandbox] Failed to ensure VS Build Tools: $($_.Exception.Message)"
     }
 
     Write-Host "[sandbox] Restarting start-runner.ps1 under updated environment..."
