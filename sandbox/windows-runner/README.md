@@ -5,6 +5,7 @@ This folder contains scripts to spin up a **throwaway Windows GitHub Actions run
 ## Prerequisites
 
 - Windows 10/11 Pro or Enterprise with **Windows Sandbox** enabled.
+`Start-Process dism -ArgumentList '/online /enable-Feature /FeatureName:Containers-DisposableClientVM' -verb runas` [needs reboot]
 - GitHub CLI (`gh`) installed and authenticated on the **host**.
 
 ## Files

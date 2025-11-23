@@ -67,12 +67,15 @@ if (-not $SkipBootstrap) {
                 @{ Id = 'Python.Python.3.11' },
                 @{ Id = 'GnuWin32.curl' },
                 @{ Id = 'GnuWin32.wget' },
-                @{ Id = 'Microsoft.PowerShell' }
+                @{ Id = 'GitHub.cli' },
+                @{ Id = 'Microsoft.PowerShell' },
+                @{ Id = 'Microsoft.VisualStudio.2019.BuildTools' },
+                @{ Id = 'Microsoft.VisualStudio.2022.BuildTools' }
             )
             foreach ($pkg in $packages) {
                 try {
                     Write-Host "[sandbox] Installing or updating $($pkg.Id) via winget..."
-                    winget install --id $($pkg.Id) -e --accept-package-agreements --accept-source-agreements | Out-Null
+                    winget install --id $($pkg.Id) -e --accept-package-agreements --accept-source-agreements --source winget | Out-Null
                 } catch {
                     Write-Warning "[sandbox] winget failed for $($pkg.Id): $($_.Exception.Message)"
                 }
@@ -116,6 +119,8 @@ if (-not $SkipBootstrap) {
 
     Write-Host "[sandbox] Initial bootstrap: ensuring Visual Studio Build Tools are installed..."
     try {
+        Install-Module -Name VSSetup -Force -Scope AllUsers -AllowClobber -ErrorAction SilentlyContinue -Confirm:$false
+        Import-Module VSSetup -ErrorAction SilentlyContinue
         $vsInstallPath = "C:\BuildTools"
         $vsMarkerFile  = Join-Path $vsInstallPath ".install-complete"
 
