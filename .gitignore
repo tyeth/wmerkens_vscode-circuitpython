@@ -21,3 +21,5 @@ build
 yarn-error.log
 package
 built.*
+.github-artifacts/
+sandbox/windows-runner/cp-windows-runner.wsb
