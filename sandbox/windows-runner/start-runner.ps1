@@ -64,13 +64,13 @@ if (-not $SkipBootstrap) {
             $packages = @(
                 @{ Id = 'Git.Git' },
                 @{ Id = 'OpenJS.NodeJS' },      # Node.js (we'll pin major version below)
-                @{ Id = 'Python.Python.3.11' },
+                # @{ Id = 'Python.Python.3.11' },
                 @{ Id = 'GnuWin32.curl' },
                 @{ Id = 'GnuWin32.wget' },
-                @{ Id = 'GitHub.cli' },
                 @{ Id = 'Microsoft.PowerShell' },
                 @{ Id = 'Microsoft.VisualStudio.2019.BuildTools' },
-                @{ Id = 'Microsoft.VisualStudio.2022.BuildTools' }
+                # @{ Id = 'Microsoft.VisualStudio.2022.BuildTools' },
+                @{ Id = 'GitHub.cli' }
             )
             foreach ($pkg in $packages) {
                 try {

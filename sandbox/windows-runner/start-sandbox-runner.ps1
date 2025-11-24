@@ -10,10 +10,40 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+Write-Host "[host] Detecting repository root from script location..."
+$scriptPath = $PSCommandPath
+if (-not $scriptPath) {
+    throw "Unable to determine script path via PSCommandPath."
+}
+$scriptDir = Split-Path -Path $scriptPath -Parent
+
+function Get-RepoRootFromPath {
+    param([Parameter(Mandatory)] [string]$StartPath)
+
+    $current = Get-Item -Path $StartPath -ErrorAction Stop
+    while ($current) {
+        $gitDir = Join-Path -Path $current.FullName -ChildPath ".git"
+        if (Test-Path -Path $gitDir) {
+            return $current.FullName
+        }
+        $current = $current.Parent
+    }
+    return $null
+}
+
+$repoPath = Get-RepoRootFromPath -StartPath $scriptDir
+if ($repoPath) {
+    Write-Host "[host] Repository root detected at '$repoPath'."
+} else {
+    Write-Warning "[host] Could not locate a .git directory; defaulting to script directory '$scriptDir'."
+    $repoPath = $scriptDir
+}
+
+$repoPath = (Resolve-Path -Path $repoPath).Path
+
 Write-Host "[host] Ensuring sandbox config directory exists..."
 
-# Resolve repo root and sandbox paths relative to current working directory
-$repoPath = (Get-Location).Path
+# Resolve repo root and sandbox paths relative to detected repo directory
 $fullSandboxConfigPath = Join-Path -Path $repoPath -ChildPath $SandboxConfigPath
 $configDir = [System.IO.Path]::GetDirectoryName($fullSandboxConfigPath)
 if (-not (Test-Path $configDir)) {
